@@ -1,4 +1,4 @@
-# self signed cert
+# ssc - self signed cert
 
 ## Build it
 ```bash
@@ -16,7 +16,7 @@
 openssl x509 -in cert.pem -text
 ```
 
-## Source is copy of (BSD License)
+## Source is copy of this file from Golang Project (BSD License)
 
 https://golang.org/src/crypto/tls/generate_cert.go
 
