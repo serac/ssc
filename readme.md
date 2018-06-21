@@ -1,4 +1,4 @@
-# ssc - self signed cert
+# ssc - generate a self signed cert with multiple SANs
 
 ## Build it
 ```bash
