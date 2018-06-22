@@ -28,10 +28,26 @@ import (
 )
 
 var (
-	host       = flag.String("host", "", "Comma-separated hostnames and IPs to generate a certificate for")
+	attributeMap = map[string][]int {
+	  "CN":           []int{2, 5, 4, 3},
+	  "L":            []int{2, 5, 4, 7},
+	  "ST":           []int{2, 5, 4, 8},
+	  "O":            []int{2, 5, 4, 10},
+	  "OU":           []int{2, 5, 4, 11},
+	  "C":            []int{2, 5, 4, 6},
+	  "STREET":       []int{2, 5, 4, 9},
+	  "SERIALNUMBER": []int{2, 5, 4, 5},
+	  "DC":           []int{0, 9, 2342, 19200300, 100, 1, 25},
+	  "UID":          []int{0, 9, 2342, 19200300, 100, 1, 1},
+	  "EMAILADDRESS": []int{1, 2, 840, 113549, 1, 9, 1},
+	}
+
+	// Script options
+	subject    = flag.String("subject", "", "Certificate subject distinguished name")
+	sans       = flag.String("sans", "", "Comma-separated list of DNS subject alternative names")
 	validFrom  = flag.String("start-date", "", "Creation date formatted as Jan 1 15:04:05 2011")
-	validFor   = flag.Duration("duration", 365*24*time.Hour, "Duration that certificate is valid for")
-	isCA       = flag.Bool("ca", false, "whether this cert should be its own Certificate Authority")
+	validFor   = flag.Duration("duration", 365*24*time.Hour, "Duration that certificate is valid for in hours")
+	isCA       = flag.Bool("ca", false, "True to create a CA cert")
 	rsaBits    = flag.Int("rsa-bits", 2048, "Size of RSA key to generate. Ignored if --ecdsa-curve is set")
 	ecdsaCurve = flag.String("ecdsa-curve", "", "ECDSA curve to use to generate a key. Valid values are P224, P256 (recommended), P384, P521")
 )
@@ -66,8 +82,12 @@ func pemBlockForKey(priv interface{}) *pem.Block {
 func main() {
 	flag.Parse()
 
-	if len(*host) == 0 {
-		log.Fatalf("Missing required --host parameter")
+	if len(*subject) == 0 || len(*sans) == 0 {
+		fmt.Printf("USAGE: %s --subject subjectDN --sans delimitedListOfHostNames\n", os.Args[0])
+		flag.PrintDefaults()
+		fmt.Printf("EXAMPLE:\n")
+		fmt.Printf("%s --subject CN=a.example.org,O=Example --sans a.example.org,b.example.org\n", os.Args[0])
+		os.Exit(0)
 	}
 
 	var priv interface{}
@@ -110,20 +130,33 @@ func main() {
 		log.Fatalf("failed to generate serial number: %s", err)
 	}
 
+  // Parse string representation of subject DN
+  var tv pkix.AttributeTypeAndValue
+  var vals []string
+  rdnAttributes := []pkix.AttributeTypeAndValue {}
+	attributes := strings.Split(*subject, ",")
+	for _, attr := range attributes {
+		vals = strings.Split(attr, "=")
+		tv = pkix.AttributeTypeAndValue {
+			Type: attributeMap[vals[0]],
+			Value: vals[1],
+		}
+		rdnAttributes = append(rdnAttributes, tv)
+	}
+
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Acme Co"},
+		Subject: pkix.Name {
+			ExtraNames: rdnAttributes,
 		},
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
-
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:  x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 	}
 
-	hosts := strings.Split(*host, ",")
+	hosts := strings.Split(*sans, ",")
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
